@@ -1,98 +1,152 @@
 # TwinMind Live Suggestions
 
-An always-on AI meeting copilot that listens to live audio and continuously surfaces three contextually-aware suggestion cards.
+An always-on AI meeting copilot that listens to live microphone audio, appends transcript chunks, and continuously surfaces three useful live suggestions. Clicking a suggestion sends it to the chat panel and returns a longer answer grounded in meeting context.
 
-## 1. Setup
+## Setup
+
+Run the backend and frontend in separate terminals.
 
 ```bash
-# Terminal 1 — frontend
-cd client
-npm install
-npm run dev          # → http://localhost:5173
-
-# Terminal 2 — backend
+# Terminal 1: backend
 cd server
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
-Open http://localhost:5173, click the settings gear, paste your Groq API key, and hit Save.
-
-## 2. Environment
-
-Only one env var is needed client-side:
-
-```
-VITE_API_URL=http://localhost:8000   # default — only change for production
+```bash
+# Terminal 2: frontend
+cd client
+npm install
+npm run dev
 ```
 
-No server-side env vars are required. The Groq API key is entered by the user in the Settings modal and stored in `localStorage`. The backend reads it per-request from the `X-Groq-Api-Key` header and never persists it.
+Open `http://localhost:5173`, click the settings button, paste a Groq API key, and save.
 
-## 2.1 Testing
+## Environment
+
+For local development, create `client/.env.local` if you want to override the API URL:
+
+```env
+VITE_API_URL=http://localhost:8000
+```
+
+No server-side Groq key is required. The user enters their own Groq API key in the Settings modal. The key is stored in browser `localStorage` as `groq_api_key` and sent to the backend on each request as the `X-Groq-Api-Key` header. The backend never persists it.
+
+## Stack Choices
+
+| Layer | Choice | Reason |
+|---|---|---|
+| Frontend | React 19 + Vite | Fast local workflow and a simple component model for the required 3-column UI. |
+| Styling | Tailwind CSS | Compact dark-theme styling without extra component dependencies. |
+| State | React Context + `useReducer` | Session-only state fits a reducer well; Redux would be unnecessary. |
+| Audio capture | Browser `MediaRecorder` | Native mic capture with 30 second chunks and manual `requestData()` flush support. |
+| Transcription | Groq `whisper-large-v3` | Assignment-required Whisper Large V3 model. |
+| Suggestions/chat | Groq `openai/gpt-oss-120b` | Assignment-required GPT-OSS 120B model on Groq. |
+| Backend | FastAPI + httpx | Lightweight async proxy for Groq transcription, JSON suggestions, summary calls, and streaming chat. |
+| Hosting | Vercel | Static Vite build plus Python serverless FastAPI entrypoint in `api/index.py`. |
+
+## App Flow
+
+The UI follows the assignment prototype:
+
+- Left column: start/stop mic control and streaming transcript chunks.
+- Middle column: live suggestion batches, newest first, with a manual reload button.
+- Right column: one continuous chat session.
+- Header: export button for transcript, suggestion batches, and chat history.
+
+Audio is recorded in roughly 30 second WebM/Opus chunks. Manual reload asks `MediaRecorder` to flush the in-progress chunk first, waits for transcription, then requests suggestions.
+
+## Prompt Strategy
+
+The system uses separate prompts for the three different jobs.
+
+**Live suggestions:** `/api/suggestions` requests exactly three JSON cards. The default prompt requires the model to choose from `ANSWER`, `QUESTION_TO_ASK`, `FACT_CHECK`, `TALKING_POINT`, and `CLARIFICATION`, vary the mix, and make every preview useful on its own. The prompt explicitly rejects teaser text like "click to learn more" because evaluators judge the card before it is opened.
+
+**Detailed answer on click:** Each suggestion includes a `detail_prompt`. Clicking the card sends that prompt plus the card preview into the chat flow with a separate detailed-answer system prompt. This prompt asks for concise but substantive answers, grounded in the transcript, with bullets and bold terms where useful.
+
+**Free chat:** User-entered questions use the chat prompt and preserve the full chat history for continuity. The transcript is injected as context so answers stay tied to what was actually said in the meeting.
+
+All three prompts are editable in Settings so prompt iterations can be tested without code changes.
+
+## Context Strategy
+
+Live suggestions optimize for "what is useful right now":
+
+- `recent_transcript`: default last 90 seconds, primary signal for suggestions.
+- `session_summary`: rolling 2-3 sentence summary refreshed every 5 minutes.
+- `full_transcript`: only sent as a fallback before a rolling summary exists.
+
+Detailed answers use a separate expanded-answer context window. The default is 900 seconds, which gives enough context for a useful answer without sending an entire long meeting on every card click.
+
+Free chat uses the current transcript context plus the chat history, because user questions may refer to earlier parts of the meeting.
+
+## API Routes
+
+Backend routes are exposed under `/api`:
+
+- `GET /api/health`
+- `POST /api/transcribe`
+- `POST /api/suggestions`
+- `POST /api/summary`
+- `POST /api/chat/stream`
+
+`api/index.py` is the Vercel entrypoint. It imports the FastAPI app from `server/main.py` and also serves the built React app if Vercel routes `/` into the Python function.
+
+## Testing
+
+Backend tests mock Groq calls and cover route behavior, malformed JSON retry, summaries, streaming chat message construction, and transcription error mapping.
 
 ```bash
 cd server
 pip install -r requirements.txt -r requirements-dev.txt
 pytest
+```
 
-cd ../client
+Frontend lint:
+
+```bash
+cd client
 npm ci
 npm run lint
+```
+
+Production build:
+
+```bash
+cd client
 npm run build
 ```
 
-## 2.2 Deployment
+GitHub Actions runs backend tests, frontend lint, and frontend build on pushes and pull requests.
 
-This repo includes `vercel.json` and `api/index.py` so Vercel can build the React app from `client/` and route `/api/*` requests to the FastAPI app as a Python serverless function.
+## Deployment
 
-To deploy automatically:
-1. Push the project to GitHub.
-2. Import the GitHub repo in Vercel.
-3. Use the repository defaults from `vercel.json`.
+The repo includes:
 
-Vercel will deploy on pushes after the Git integration is connected. GitHub Actions in `.github/workflows/ci.yml` runs backend tests plus frontend lint/build on pushes and pull requests.
+- `vercel.json` for Vercel build and rewrites.
+- `api/index.py` for the Python serverless entrypoint.
+- root `requirements.txt` for Vercel Python dependencies.
+- `.python-version` for Python 3.12.
 
-## 3. Stack Choices
+Deploy flow:
 
-| Layer | Choice | Why |
-|---|---|---|
-| Frontend | React 19 + Vite | Fast HMR; component model maps cleanly to the 3-column layout |
-| Styling | Tailwind CSS | Dark theme utilities; no custom CSS files needed |
-| State | React Context + useReducer | Session-only state; Redux would be overkill |
-| Audio capture | MediaRecorder API | Browser-native 30s timeslice chunks; no third-party dep |
-| STT | Groq Whisper Large V3 | Mandated; fast and accurate |
-| LLM | `openai/gpt-oss-120b` | Assignment-required Groq-hosted GPT-OSS 120B model |
-| Backend | Python FastAPI + httpx | Async, lightweight; native SSE streaming support |
+1. Push the repo to GitHub.
+2. Import the repo in Vercel.
+3. Let Vercel use the checked-in `vercel.json`.
 
-## 4. Prompt Strategy
+Expected checks after deploy:
 
-Three prompts drive the system:
+```text
+/            -> React app
+/api/health  -> {"status":"ok"}
+```
 
-**Live Suggestions** (`/api/suggestions`, every 30s): The system prompt enforces a 5-type taxonomy — `ANSWER`, `QUESTION_TO_ASK`, `FACT_CHECK`, `TALKING_POINT`, `CLARIFICATION` — and requires varied types per batch. Crucially, previews must deliver *standalone value*: a real fact, a real answer, or a real question with reasoning. The model is forbidden from writing teaser copy like "click to learn more."
+## Tradeoffs
 
-**Detailed Answer** (on card click): Expands the card's `detail_prompt` field using a configurable expanded-answer transcript window. Defaults to 15 minutes so answers have enough context without paying for the entire meeting on every click. Targets 150–300 words, uses bullets and bold for scannability.
-
-**Chat** (free-text): Maintains full conversation history per session. The full transcript is injected into the system prompt so every response is grounded in what was actually said.
-
-## 5. Context Windowing
-
-Every suggestion call sends:
-- `recent_transcript` — last 90 seconds of transcribed text (primary signal)
-- `session_summary` — a 2–3 sentence rolling summary updated every 5 minutes (not every call)
-
-Sending the full transcript on every 30s suggestion call would be expensive and slow. The 90s window captures what the conversation is about *right now*, while the rolling summary preserves meeting-wide context without paying for the full token count on every call.
-
-Manual reload asks the browser `MediaRecorder` to flush the current in-progress audio chunk, waits for transcription, and then requests suggestions. If no recording is active, it refreshes suggestions from the latest completed transcript.
-
-## 6. Tradeoffs
-
-- **No mobile layout** — the 3-column design targets laptop/desktop; responsive CSS would require a complete layout redesign for small screens.
-- **No persistence across page reloads** — all state lives in React. Session export (JSON download) is the escape hatch.
-- **No multi-speaker diarization** — Whisper transcribes audio but doesn't label speakers. Adding speaker labels would require a diarization step.
-- **API key in localStorage** — convenient for a single-user tool; not suitable for a shared/multi-tenant deployment where a server-side secrets store would be needed.
-
-## 7. Known Limitations
-
-- **WebM codec header prepend** — MediaRecorder timeslice chunks after the first do not contain the codec header. Each subsequent chunk is prepended with the first chunk (which does contain the header) before being sent to Whisper, so it can parse the audio independently. Without this, Whisper returns garbled or empty transcriptions for all but the first chunk.
-- **30s timeslice latency floor** — The minimum end-to-end latency is ~30s (the timeslice duration) plus Whisper inference time. Sub-30s suggestions are not possible with the current chunking strategy.
-- **CORS origins** — The backend allows `localhost:5173` and `localhost:4173` by default. For production, update `allow_origins` in `server/main.py` to your Vercel deployment URL.
+- **Desktop-first layout:** The assignment prototype is a 3-column desktop meeting UI. The app keeps that layout instead of spending complexity on a mobile redesign.
+- **No login or persistence:** State is session-only in React. Reloading clears transcript and chat. Export provides the evaluation artifact.
+- **API key in localStorage:** This is convenient for a single-user assignment app and avoids shipping a key. A multi-tenant product should use server-side secret storage or delegated auth.
+- **No speaker diarization:** Whisper provides transcript text but not speaker labels. Diarization would add latency and another model/service.
+- **30 second baseline latency:** Timed transcript chunks use 30 second slices. Manual reload can flush the current chunk, but automatic suggestions still follow the chunk cadence.
+- **JSON parsing retry:** Suggestions are requested as JSON. If the model returns malformed JSON, the backend retries once at temperature 0 before returning a 422.
+- **Rolling summary over full transcript:** Sending the full transcript every 30 seconds would be slower and more expensive. Recent transcript plus rolling summary is a better fit for live suggestions.
