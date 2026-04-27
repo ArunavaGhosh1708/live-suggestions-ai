@@ -1,7 +1,6 @@
 import sys
 from pathlib import Path
 
-from fastapi import FastAPI  # noqa: E402
 from fastapi.responses import FileResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
@@ -9,10 +8,7 @@ SERVER_DIR = Path(__file__).resolve().parents[1] / 'server'
 if str(SERVER_DIR) not in sys.path:
     sys.path.insert(0, str(SERVER_DIR))
 
-from main import app as api_app  # noqa: E402
-
-app = FastAPI(title='TwinMind Vercel App')
-app.mount('/api', api_app)
+from main import app  # noqa: E402
 
 DIST_DIR = Path(__file__).resolve().parents[1] / 'client' / 'dist'
 ASSETS_DIR = DIST_DIR / 'assets'
