@@ -61,7 +61,7 @@ Vercel will deploy on pushes after the Git integration is connected. GitHub Acti
 | State | React Context + useReducer | Session-only state; Redux would be overkill |
 | Audio capture | MediaRecorder API | Browser-native 30s timeslice chunks; no third-party dep |
 | STT | Groq Whisper Large V3 | Mandated; fast and accurate |
-| LLM | `llama-3.3-70b-versatile` | Mandated; GPT-OSS 120B equivalent |
+| LLM | `openai/gpt-oss-120b` | Assignment-required Groq-hosted GPT-OSS 120B model |
 | Backend | Python FastAPI + httpx | Async, lightweight; native SSE streaming support |
 
 ## 4. Prompt Strategy
@@ -70,7 +70,7 @@ Three prompts drive the system:
 
 **Live Suggestions** (`/api/suggestions`, every 30s): The system prompt enforces a 5-type taxonomy — `ANSWER`, `QUESTION_TO_ASK`, `FACT_CHECK`, `TALKING_POINT`, `CLARIFICATION` — and requires varied types per batch. Crucially, previews must deliver *standalone value*: a real fact, a real answer, or a real question with reasoning. The model is forbidden from writing teaser copy like "click to learn more."
 
-**Detailed Answer** (on card click): Expands the card's `detail_prompt` field using the full transcript as context. Targets 150–300 words, uses bullets and bold for scannability.
+**Detailed Answer** (on card click): Expands the card's `detail_prompt` field using a configurable expanded-answer transcript window. Defaults to 15 minutes so answers have enough context without paying for the entire meeting on every click. Targets 150–300 words, uses bullets and bold for scannability.
 
 **Chat** (free-text): Maintains full conversation history per session. The full transcript is injected into the system prompt so every response is grounded in what was actually said.
 
@@ -81,6 +81,8 @@ Every suggestion call sends:
 - `session_summary` — a 2–3 sentence rolling summary updated every 5 minutes (not every call)
 
 Sending the full transcript on every 30s suggestion call would be expensive and slow. The 90s window captures what the conversation is about *right now*, while the rolling summary preserves meeting-wide context without paying for the full token count on every call.
+
+Manual reload asks the browser `MediaRecorder` to flush the current in-progress audio chunk, waits for transcription, and then requests suggestions. If no recording is active, it refreshes suggestions from the latest completed transcript.
 
 ## 6. Tradeoffs
 

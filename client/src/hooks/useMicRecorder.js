@@ -1,10 +1,17 @@
-import { useRef, useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 
 export function useMicRecorder({ onChunk }) {
   const mediaRecorderRef = useRef(null)
   const streamRef = useRef(null)
   const headerBlobRef = useRef(null)
   const chunkCountRef = useRef(0)
+  const flushResolversRef = useRef([])
+
+  const resolveFlushes = useCallback(() => {
+    const resolvers = flushResolversRef.current
+    flushResolversRef.current = []
+    resolvers.forEach((resolve) => resolve())
+  }, [])
 
   const start = useCallback(async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -14,35 +21,48 @@ export function useMicRecorder({ onChunk }) {
       ? 'audio/webm;codecs=opus'
       : 'audio/webm'
 
-    const recorder = new MediaRecorder(stream, { mimeType, timeslice: 30000 })
+    const recorder = new MediaRecorder(stream, { mimeType })
     mediaRecorderRef.current = recorder
     chunkCountRef.current = 0
     headerBlobRef.current = null
 
-    recorder.ondataavailable = (e) => {
-      if (!e.data || e.data.size === 0) return
-      chunkCountRef.current++
-
-      if (chunkCountRef.current === 1) {
-        // First chunk contains the codec header — save it and send as-is
-        headerBlobRef.current = e.data
-        onChunk(e.data)
-      } else {
-        // Subsequent chunks need the header prepended so Whisper can parse them
-        const combined = new Blob([headerBlobRef.current, e.data], { type: mimeType })
-        onChunk(combined)
+    recorder.ondataavailable = async (e) => {
+      if (!e.data || e.data.size === 0) {
+        resolveFlushes()
+        return
       }
+
+      chunkCountRef.current++
+      if (chunkCountRef.current === 1) {
+        headerBlobRef.current = e.data
+        await onChunk(e.data)
+      } else {
+        const combined = new Blob([headerBlobRef.current, e.data], { type: mimeType })
+        await onChunk(combined)
+      }
+      resolveFlushes()
     }
 
     recorder.start(30000)
-  }, [onChunk])
+  }, [onChunk, resolveFlushes])
 
   const stop = useCallback(() => {
     mediaRecorderRef.current?.stop()
-    streamRef.current?.getTracks().forEach((t) => t.stop())
+    streamRef.current?.getTracks().forEach((track) => track.stop())
     mediaRecorderRef.current = null
     streamRef.current = null
+    resolveFlushes()
+  }, [resolveFlushes])
+
+  const flush = useCallback(() => {
+    const recorder = mediaRecorderRef.current
+    if (!recorder || recorder.state !== 'recording') return Promise.resolve()
+
+    return new Promise((resolve) => {
+      flushResolversRef.current.push(resolve)
+      recorder.requestData()
+    })
   }, [])
 
-  return { start, stop }
+  return { start, stop, flush }
 }

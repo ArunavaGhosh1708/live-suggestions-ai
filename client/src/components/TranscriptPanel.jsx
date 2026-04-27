@@ -25,11 +25,20 @@ export default function TranscriptPanel() {
     }
   }, [state.groqApiKey, dispatch])
 
-  const { start, stop } = useMicRecorder({ onChunk: handleChunk })
+  const { start, stop, flush } = useMicRecorder({ onChunk: handleChunk })
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [state.transcript])
+
+  useEffect(() => {
+    function handleFlushRequest(event) {
+      flush().finally(() => event.detail?.resolve?.())
+    }
+
+    window.addEventListener('twinmind:flush-transcript', handleFlushRequest)
+    return () => window.removeEventListener('twinmind:flush-transcript', handleFlushRequest)
+  }, [flush])
 
   async function toggleRecording() {
     if (state.isRecording) {

@@ -18,13 +18,13 @@ export function useStreamingChat() {
     dispatch({ type: 'ADD_CHAT_MESSAGE', payload: assistantMsg })
     dispatch({ type: 'SET_STREAMING_CHAT', payload: true })
 
-    const fullTranscript = state.transcript.map((c) => `[${c.timestamp}] ${c.text}`).join('\n')
+    const transcript = options.transcript ?? state.transcript.map((c) => `[${c.timestamp}] ${c.text}`).join('\n')
     const history = state.chatHistory.map(({ role, content }) => ({ role, content }))
 
     try {
       const stream = streamChat({
         message: messageText,
-        transcript: fullTranscript,
+        transcript,
         history,
         apiKey: state.groqApiKey,
         systemPrompt: options.systemPrompt || state.settings.chatPrompt,

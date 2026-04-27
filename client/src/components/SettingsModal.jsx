@@ -8,6 +8,7 @@ export default function SettingsModal() {
   const [chatPrompt, setChatPrompt] = useState(state.settings.chatPrompt)
   const [detailPrompt, setDetailPrompt] = useState(state.settings.detailPrompt)
   const [contextWindowSecs, setContextWindowSecs] = useState(state.settings.contextWindowSecs)
+  const [detailContextWindowSecs, setDetailContextWindowSecs] = useState(state.settings.detailContextWindowSecs)
   const [refreshIntervalSecs, setRefreshIntervalSecs] = useState(state.settings.refreshIntervalSecs)
 
   function save() {
@@ -15,7 +16,14 @@ export default function SettingsModal() {
     dispatch({ type: 'SET_API_KEY', payload: apiKey })
     dispatch({
       type: 'SET_SETTINGS',
-      payload: { suggestionPrompt, chatPrompt, detailPrompt, contextWindowSecs: Number(contextWindowSecs), refreshIntervalSecs: Number(refreshIntervalSecs) },
+      payload: {
+        suggestionPrompt,
+        chatPrompt,
+        detailPrompt,
+        contextWindowSecs: Number(contextWindowSecs),
+        detailContextWindowSecs: Number(detailContextWindowSecs),
+        refreshIntervalSecs: Number(refreshIntervalSecs),
+      },
     })
     dispatch({ type: 'TOGGLE_SETTINGS' })
   }
@@ -73,9 +81,9 @@ export default function SettingsModal() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Context Window (seconds)</label>
+              <label className="block text-sm font-medium text-slate-300 mb-1">Suggestion Context (sec)</label>
               <input
                 type="number"
                 value={contextWindowSecs}
@@ -86,7 +94,18 @@ export default function SettingsModal() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Refresh Interval (seconds)</label>
+              <label className="block text-sm font-medium text-slate-300 mb-1">Answer Context (sec)</label>
+              <input
+                type="number"
+                value={detailContextWindowSecs}
+                onChange={(e) => setDetailContextWindowSecs(e.target.value)}
+                min={60}
+                max={3600}
+                className="w-full bg-[#0f1923] border border-[#2d3f55] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">Refresh Interval (sec)</label>
               <input
                 type="number"
                 value={refreshIntervalSecs}

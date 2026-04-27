@@ -17,6 +17,18 @@ const TYPE_LABELS = {
   CLARIFICATION: 'CLARIFICATION',
 }
 
+function transcriptWindow(transcript, windowSecs) {
+  const nowMs = Date.now() % 86400000
+  const windowMs = windowSecs * 1000
+  const chunks = transcript.filter((chunk) => {
+    const [h, m, s] = chunk.timestamp.split(':').map(Number)
+    const chunkMs = (h * 3600 + m * 60 + s) * 1000
+    return nowMs - chunkMs < windowMs
+  })
+  const selected = chunks.length > 0 ? chunks : transcript
+  return selected.map((chunk) => `[${chunk.timestamp}] ${chunk.text}`).join('\n')
+}
+
 export default function SuggestionCard({ suggestion }) {
   const { state } = useSession()
   const { sendMessage } = useStreamingChat()
@@ -24,7 +36,10 @@ export default function SuggestionCard({ suggestion }) {
 
   function handleClick() {
     const msg = `${suggestion.detail_prompt}\n\n[Context: "${suggestion.preview}"]`
-    sendMessage(msg, { systemPrompt: state.settings.detailPrompt })
+    sendMessage(msg, {
+      systemPrompt: state.settings.detailPrompt,
+      transcript: transcriptWindow(state.transcript, state.settings.detailContextWindowSecs),
+    })
   }
 
   return (

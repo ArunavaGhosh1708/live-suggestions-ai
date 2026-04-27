@@ -36,6 +36,6 @@ Capture the main topic, key decisions or claims made, and any open questions.
 Be dense — every word must carry information."""
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_MODEL = "openai/gpt-oss-120b"
 GROQ_WHISPER_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 GROQ_WHISPER_MODEL = "whisper-large-v3"

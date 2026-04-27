@@ -6,6 +6,13 @@ import SuggestionCard from './SuggestionCard'
 
 const SUMMARY_INTERVAL_MS = 5 * 60 * 1000
 
+function requestTranscriptFlush() {
+  return new Promise((resolve) => {
+    window.dispatchEvent(new CustomEvent('twinmind:flush-transcript', { detail: { resolve } }))
+    setTimeout(resolve, 8000)
+  })
+}
+
 export default function SuggestionsPanel() {
   const { state, dispatch } = useSession()
   const [error, setError] = useState(null)
@@ -74,10 +81,11 @@ export default function SuggestionsPanel() {
     onTick: loadSuggestions,
   })
 
-  function handleManualReload() {
+  async function handleManualReload() {
     if (reloadCooldown) return
-    loadSuggestions()
     setReloadCooldown(true)
+    if (state.isRecording) await requestTranscriptFlush()
+    await loadSuggestions()
     setTimeout(() => setReloadCooldown(false), 2000)
   }
 

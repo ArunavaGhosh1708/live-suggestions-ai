@@ -17,6 +17,7 @@ const initialState = {
     chatPrompt: DEFAULT_CHAT_PROMPT,
     detailPrompt: DEFAULT_DETAIL_PROMPT,
     contextWindowSecs: 90,
+    detailContextWindowSecs: 900,
     refreshIntervalSecs: 30,
   },
 }
